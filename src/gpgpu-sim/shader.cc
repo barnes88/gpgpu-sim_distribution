@@ -228,9 +228,16 @@ void shader_core_ctx::create_schedulers() {
   }
 
   for (unsigned i = 0; i < m_warp.size(); i++) {
-    // distribute i's evenly though schedulers;
-    schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+      if (!m_config->gpgpu_skew_sched_warp_assign) {
+        // distribute i's evenly though schedulers;
+        schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
         i);
+      } else {
+        // distribute i's evenly though schedulers; but start from a different index every time
+        unsigned start_ind = (i / m_config->gpgpu_num_sched_per_core) % m_config->gpgpu_num_sched_per_core;
+        schedulers[(i + start_ind) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+        i);
+      }
   }
   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; ++i) {
     schedulers[i]->done_adding_supervised_warps();

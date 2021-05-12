@@ -1538,6 +1538,7 @@ class shader_core_config : public core_config {
   unsigned gpgpu_num_sched_per_core;
   int gpgpu_max_insn_issue_per_warp;
   bool gpgpu_dual_issue_diff_exec_units;
+  bool gpgpu_skew_sched_warp_assign;
 
   // op collector
   bool enable_specialized_operand_collector;
