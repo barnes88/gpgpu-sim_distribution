@@ -472,9 +472,17 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          "Max number of instructions that can be issued per "
                          "warp in one cycle by scheduler (either 1 or 2)",
                          "2");
-   option_parser_register(opp, "-gpgpu_skew_sched_warp_assign", OPT_BOOL,
+  option_parser_register(opp, "-gpgpu_skew_sched_warp_assign", OPT_BOOL,
                          &gpgpu_skew_sched_warp_assign,
                          "Enable skewing of scheduler warp assignment",
+                         "0");
+  option_parser_register(opp, "-gpgpu_dynamic_sched_warp_profile", OPT_BOOL,
+                         &gpgpu_dynamic_sched_warp_profile,
+                         "Enable dynamic scheduler warp profiling",
+                         "0");
+  option_parser_register(opp, "-gpgpu_dynamic_sched_warp_assign", OPT_BOOL,
+                         &gpgpu_dynamic_sched_warp_assign,
+                         "Enable dynamic scheduler warp assignment",
                          "0");
   option_parser_register(opp, "-gpgpu_dual_issue_diff_exec_units", OPT_BOOL,
                          &gpgpu_dual_issue_diff_exec_units,

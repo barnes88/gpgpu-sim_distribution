@@ -223,19 +223,49 @@ void shader_core_ctx::create_schedulers() {
         abort();
     };
   }
-
-  for (unsigned i = 0; i < m_warp.size(); i++) {
-      if (!m_config->gpgpu_skew_sched_warp_assign) {
-        // distribute i's evenly though schedulers;
-        schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
-        i);
+  if (m_config->gpgpu_dynamic_sched_warp_assign) {
+        // Use profiled data from SM 0 from a previous kernel launch to inform the warp scheduler assignment decision
+        // Always assign to the scheduler with the least number of warp issue count
+        std::ifstream is("./ws_profile.txt");
+        std::istream_iterator<unsigned long long> start(is), end;
+        std::vector<unsigned long long> warp_issue_counts(start, end);
+        std::vector<unsigned long long> warp_sched_buckets(m_config->gpgpu_num_sched_per_core, 0);
+        assert(warp_issue_counts.size() <= m_warp.size() && warp_issue_counts.size() > 0);
+        for (unsigned i=0; i< m_warp.size(); i++) {
+          if (i < warp_issue_counts.size()) {
+            unsigned s_id = 0;
+            unsigned long long min = warp_sched_buckets[0];
+            for (unsigned j=0; j < m_config->gpgpu_num_sched_per_core; j++) {
+              if (warp_sched_buckets[j] < min) {
+                s_id = j;
+                min = warp_sched_buckets[j];
+              }
+            }
+            // assign to the min bucket scheduler and update its count
+            schedulers[s_id]->add_supervised_warp_id(i);
+            warp_sched_buckets[s_id] += warp_issue_counts[i];
+          } else {
+            // no profile data for these warps, so assign using RR
+            schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+            i);
+          }
+        }
       } else {
-        // distribute i's evenly though schedulers; but start from a different index every time
-        unsigned start_ind = (i / m_config->gpgpu_num_sched_per_core) % m_config->gpgpu_num_sched_per_core;
-        schedulers[(i + start_ind) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
-        i);
+        for (unsigned i = 0; i < m_warp.size(); i++) {
+          if (m_config->gpgpu_skew_sched_warp_assign) {
+            // distribute i's evenly though schedulers; but start from a different index every time
+            unsigned start_ind = (i / m_config->gpgpu_num_sched_per_core) % m_config->gpgpu_num_sched_per_core;
+            schedulers[(i + start_ind) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+            i);
+          } else {
+            // distribute i's evenly though schedulers;
+            schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+            i);
+          }
+        }
       }
-  }
+
+
   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; ++i) {
     schedulers[i]->done_adding_supervised_warps();
   }
@@ -2821,6 +2851,15 @@ void gpgpu_sim::shader_print_scheduler_stat(FILE *fout,
     fprintf(fout, "%d, ", *iter);
   }
   fprintf(fout, "\n");
+  if (m_shader_config->gpgpu_dynamic_sched_warp_profile) {
+    FILE *ws_profile;
+    ws_profile = fopen("./ws_profile.txt", "w");
+    for (std::vector<unsigned>::const_iterator iter = distro.begin();
+       iter != distro.end(); iter++) {
+      fprintf(ws_profile, "%d\n", *iter);
+    }
+    fclose(ws_profile);
+  }
 }
 
 void gpgpu_sim::shader_print_cache_stats(FILE *fout) const {
