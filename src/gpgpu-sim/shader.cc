@@ -232,22 +232,43 @@ void shader_core_ctx::create_schedulers() {
         std::vector<unsigned long long> warp_sched_buckets(m_config->gpgpu_num_sched_per_core, 0);
         assert(warp_issue_counts.size() <= m_warp.size() && warp_issue_counts.size() > 0);
         for (unsigned i=0; i< m_warp.size(); i++) {
-          if (i < warp_issue_counts.size()) {
-            unsigned s_id = 0;
-            unsigned long long min = warp_sched_buckets[0];
-            for (unsigned j=0; j < m_config->gpgpu_num_sched_per_core; j++) {
-              if (warp_sched_buckets[j] < min) {
-                s_id = j;
-                min = warp_sched_buckets[j];
+          if (!m_config->gpgpu_TB_sampling) {
+            if (i < warp_issue_counts.size()) {
+              unsigned s_id = 0;
+              unsigned long long min = warp_sched_buckets[0];
+              for (unsigned j=0; j < m_config->gpgpu_num_sched_per_core; j++) {
+                if (warp_sched_buckets[j] < min) {
+                  s_id = j;
+                  min = warp_sched_buckets[j];
+                }
               }
+              // assign to the min bucket scheduler and update its count
+              std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
+
+              schedulers[s_id]->add_supervised_warp_id(i);
+              warp_sched_buckets[s_id] += warp_issue_counts[i];
+            } else {
+              // no profile data for these warps, so assign using RR
+              std::cout << "No profile data - Assigned warpid: " << i << " to scheduler: " << (i % m_config->gpgpu_num_sched_per_core) << std::endl;
+              schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+              i);
             }
-            // assign to the min bucket scheduler and update its count
-            schedulers[s_id]->add_supervised_warp_id(i);
-            warp_sched_buckets[s_id] += warp_issue_counts[i];
           } else {
-            // no profile data for these warps, so assign using RR
-            schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
-            i);
+              // Use profile data extrapolated from a single thread block rather than an entire SM
+              unsigned sampleTBsize = 4; // need to change sampleTBsize based on application.
+              unsigned s_id = 0;
+              unsigned long long min = warp_sched_buckets[0];
+              for (unsigned j=0; j < m_config->gpgpu_num_sched_per_core; j++) {
+                if (warp_sched_buckets[j] < min) {
+                  s_id = j;
+                  min = warp_sched_buckets[j];
+                }
+              }
+              // assign to the min bucket scheduler and update its count
+              std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
+
+              schedulers[s_id]->add_supervised_warp_id(i);
+              warp_sched_buckets[s_id] += warp_issue_counts[i % sampleTBsize];
           }
         }
       } else {
@@ -2852,13 +2873,22 @@ void gpgpu_sim::shader_print_scheduler_stat(FILE *fout,
   }
   fprintf(fout, "\n");
   if (m_shader_config->gpgpu_dynamic_sched_warp_profile) {
-    FILE *ws_profile;
-    ws_profile = fopen("./ws_profile.txt", "w");
-    for (std::vector<unsigned>::const_iterator iter = distro.begin();
-       iter != distro.end(); iter++) {
-      fprintf(ws_profile, "%d\n", *iter);
+    //profile all SMs
+    for (unsigned i=0; i < m_shader_config->n_simt_clusters; i++) {
+      const std::vector<unsigned> &distro =
+      print_dynamic_info
+          ? m_shader_stats->get_dynamic_warp_issue()[i]
+          : m_shader_stats->get_warp_slot_issue()[i];
+      FILE *ws_profile;
+      std::string fname = std::to_string(i) + "ws_profile.txt";
+      ws_profile = fopen(fname.c_str(), "w");
+      for (std::vector<unsigned>::const_iterator iter = distro.begin();
+        iter != distro.end(); iter++) {
+        fprintf(ws_profile, "%d\n", *iter);
+      }
+      fclose(ws_profile);
     }
-    fclose(ws_profile);
+   
   }
 }
 
