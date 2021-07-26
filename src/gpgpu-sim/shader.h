@@ -1549,6 +1549,7 @@ class shader_core_config : public core_config {
   bool gpgpu_dynamic_sched_warp_assign;
   bool gpgpu_dynamic_sched_warp_profile;
   bool gpgpu_TB_sampling;
+  bool gpgpu_distrib_profile_data;
 
   // op collector
   bool enable_specialized_operand_collector;

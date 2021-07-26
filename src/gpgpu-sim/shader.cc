@@ -224,9 +224,16 @@ void shader_core_ctx::create_schedulers() {
     };
   }
   if (m_config->gpgpu_dynamic_sched_warp_assign) {
-        // Use profiled data from SM 0 from a previous kernel launch to inform the warp scheduler assignment decision
+        // Use profiled data from a previous threadblock to inform the warp scheduler assignment decision
         // Always assign to the scheduler with the least number of warp issue count
-        std::ifstream is("./ws_profile.txt");
+        std::string profile_filename;
+        if (m_config->gpgpu_distrib_profile_data) {
+          profile_filename = std::to_string(this->get_sid()) + "ws_profile.txt";
+          //std::cout << "shader: " << this->get_sid() << " using filename: " << profile_filename << std::endl;
+        } else {
+          profile_filename = "./ws_profile.txt";
+        }
+        std::ifstream is(profile_filename.c_str());
         std::istream_iterator<unsigned long long> start(is), end;
         std::vector<unsigned long long> warp_issue_counts(start, end);
         std::vector<unsigned long long> warp_sched_buckets(m_config->gpgpu_num_sched_per_core, 0);
@@ -243,13 +250,13 @@ void shader_core_ctx::create_schedulers() {
                 }
               }
               // assign to the min bucket scheduler and update its count
-              std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
+              // std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
 
               schedulers[s_id]->add_supervised_warp_id(i);
               warp_sched_buckets[s_id] += warp_issue_counts[i];
             } else {
               // no profile data for these warps, so assign using RR
-              std::cout << "No profile data - Assigned warpid: " << i << " to scheduler: " << (i % m_config->gpgpu_num_sched_per_core) << std::endl;
+              // std::cout << "No profile data - Assigned warpid: " << i << " to scheduler: " << (i % m_config->gpgpu_num_sched_per_core) << std::endl;
               schedulers[i % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
               i);
             }
@@ -265,7 +272,7 @@ void shader_core_ctx::create_schedulers() {
                 }
               }
               // assign to the min bucket scheduler and update its count
-              std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
+              // std::cout << "Assigned warpid: " << i << " to scheduler: " << s_id << std::endl;
 
               schedulers[s_id]->add_supervised_warp_id(i);
               warp_sched_buckets[s_id] += warp_issue_counts[i % sampleTBsize];

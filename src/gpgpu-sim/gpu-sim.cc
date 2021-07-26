@@ -484,6 +484,10 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          &gpgpu_dynamic_sched_warp_assign,
                          "Enable dynamic scheduler warp assignment",
                          "0");
+  option_parser_register(opp, "-gpgpu_distrib_profile_data", OPT_BOOL,
+                         &gpgpu_distrib_profile_data,
+                         "Enable use of profile data from each unique SM during dynamic assignment",
+                         "0");
   option_parser_register(opp, "-gpgpu_TB_sampling", OPT_BOOL,
                          &gpgpu_TB_sampling,
                          "Enable dynamic scheduler warp assignment only using profile from TB0",
