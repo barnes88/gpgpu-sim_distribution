@@ -281,6 +281,15 @@ void shader_core_ctx::create_schedulers() {
       } else {
         for (unsigned i = 0; i < m_warp.size(); i++) {
           if (m_config->gpgpu_skew_sched_warp_assign) {
+            // divide by 2 hash study
+            // schedulers[(i / 8) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+            // i);
+            //q13 sensitivity study, first 2 warps are heavy so start index increases by 2 every time
+            //unsigned start_ind = (i % 8 < 4) ? 0 : 2;
+            //schedulers[(i + start_ind) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
+            //i);
+
+
             // distribute i's evenly though schedulers; but start from a different index every time
             unsigned start_ind = (i / m_config->gpgpu_num_sched_per_core) % m_config->gpgpu_num_sched_per_core;
             schedulers[(i + start_ind) % m_config->gpgpu_num_sched_per_core]->add_supervised_warp_id(
