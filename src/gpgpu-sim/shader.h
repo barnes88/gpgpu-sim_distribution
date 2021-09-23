@@ -125,10 +125,12 @@ class shd_warp_t {
     m_cdp_latency = 0;
     m_cdp_dummy = false;
   }
+  unsigned m_saws_priority;
   void init(address_type start_pc, unsigned cta_id, unsigned wid,
             const std::bitset<MAX_WARP_SIZE> &active,
             unsigned dynamic_warp_id) {
     m_cta_id = cta_id;
+    m_saws_priority = cta_id;
     m_warp_id = wid;
     m_dynamic_warp_id = dynamic_warp_id;
     m_next_pc = start_pc;
@@ -237,6 +239,7 @@ class shd_warp_t {
   }
 
   unsigned get_cta_id() const { return m_cta_id; }
+  unsigned get_saws_priority() { return m_saws_priority; }
 
   unsigned get_dynamic_warp_id() const { return m_dynamic_warp_id; }
   unsigned get_warp_id() const { return m_warp_id; }
@@ -321,7 +324,8 @@ enum scheduler_prioritization_type {
 // Each of these corresponds to a string value in the gpgpsim.config file
 // For example - to specify the LRR scheudler the config must contain lrr
 enum concrete_scheduler {
-  CONCRETE_SCHEDULER_LRR = 0,
+  CONCRETE_SCHEDULER_SAWS = 0,
+  CONCRETE_SCHEDULER_LRR,
   CONCRETE_SCHEDULER_GTO,
   CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE,
   CONCRETE_SCHEDULER_WARP_LIMITING,
@@ -392,10 +396,14 @@ class scheduler_unit {  // this can be copied freely, so can be used in std
       unsigned num_warps_to_add, OrderingType age_ordering,
       bool (*priority_func)(U lhs, U rhs));
   static bool sort_warps_by_oldest_dynamic_id(shd_warp_t *lhs, shd_warp_t *rhs);
-
+  static bool sort_warps_by_saws_priority(shd_warp_t *lhs, shd_warp_t *rhs);
   // Derived classes can override this function to populate
   // m_supervised_warps with their scheduling policies
   virtual void order_warps() = 0;
+
+  // saws scheduler updates priority with these functions
+  virtual void warp_promotion_alg(unsigned cta_id) {}
+  virtual void decrement_promotion_reg() {}
 
   int get_schd_id() const { return m_id; }
 
@@ -456,6 +464,33 @@ class lrr_scheduler : public scheduler_unit {
   }
 };
 
+class saws_scheduler : public scheduler_unit {
+ public:
+  bool m_toggle_bit;
+  unsigned m_promotion_reg;
+  bool m_first_ordering;
+  saws_scheduler(shader_core_stats *stats, shader_core_ctx *shader,
+                Scoreboard *scoreboard, simt_stack **simt,
+                std::vector<shd_warp_t *> *warp, register_set *sp_out,
+                register_set *dp_out, register_set *sfu_out,
+                register_set *int_out, register_set *tensor_core_out,
+                std::vector<register_set *> &spec_cores_out,
+                register_set *mem_out, int id)
+      : scheduler_unit(stats, shader, scoreboard, simt, warp, sp_out, dp_out,
+                       sfu_out, int_out, tensor_core_out, spec_cores_out,
+                       mem_out, id) {
+                         m_toggle_bit = true;
+                         m_promotion_reg = 1;
+                         m_first_ordering = true;
+                       }
+  virtual ~saws_scheduler() {}
+  virtual void order_warps();
+  virtual void done_adding_supervised_warps() {
+    m_last_supervised_issued = m_supervised_warps.begin();
+  }
+  virtual void warp_promotion_alg(unsigned cta_id);
+  virtual void decrement_promotion_reg() { m_promotion_reg--; }
+};
 class gto_scheduler : public scheduler_unit {
  public:
   gto_scheduler(shader_core_stats *stats, shader_core_ctx *shader,
@@ -2156,6 +2191,8 @@ class shader_core_ctx : public core_t {
   friend class scheduler_unit;  // this is needed to use private issue warp.
   friend class TwoLevelScheduler;
   friend class LooseRoundRobbinScheduler;
+  friend class barrier_set_t; // needed for SAWS scheduler to update based on barriers
+  bool m_saws_enabled;
   virtual void issue_warp(register_set &warp, const warp_inst_t *pI,
                           const active_mask_t &active_mask, unsigned warp_id,
                           unsigned sch_id);

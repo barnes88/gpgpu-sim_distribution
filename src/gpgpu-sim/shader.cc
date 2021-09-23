@@ -162,11 +162,13 @@ void shader_core_ctx::create_front_pipeline() {
 void shader_core_ctx::create_schedulers() {
   m_scoreboard = new Scoreboard(m_sid, m_config->max_warps_per_shader, m_gpu);
 
-  // scedulers
+  // schedulers
   // must currently occur after all inputs have been initialized.
   std::string sched_config = m_config->gpgpu_scheduler_string;
+  m_saws_enabled = false;
   const concrete_scheduler scheduler =
-      sched_config.find("lrr") != std::string::npos ? CONCRETE_SCHEDULER_LRR
+      sched_config.find("saws") != std::string::npos ? CONCRETE_SCHEDULER_SAWS
+      : sched_config.find("lrr") != std::string::npos ? CONCRETE_SCHEDULER_LRR
       : sched_config.find("two_level_active") != std::string::npos
           ? CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE
       : sched_config.find("gto") != std::string::npos ? CONCRETE_SCHEDULER_GTO
@@ -179,6 +181,15 @@ void shader_core_ctx::create_schedulers() {
 
   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; i++) {
     switch (scheduler) {
+      case CONCRETE_SCHEDULER_SAWS:
+        schedulers.push_back(new saws_scheduler(
+            m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
+            &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
+            &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_MEM], i));
+        m_saws_enabled = true;
+        break;
       case CONCRETE_SCHEDULER_LRR:
         schedulers.push_back(new lrr_scheduler(
             m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
@@ -1523,11 +1534,62 @@ bool scheduler_unit::sort_warps_by_oldest_dynamic_id(shd_warp_t *lhs,
   }
 }
 
+bool scheduler_unit::sort_warps_by_saws_priority(shd_warp_t *lhs,
+                                          shd_warp_t *rhs) {
+  if (rhs && lhs) {
+    if (lhs->done_exit() || lhs->waiting()) {
+      return false;
+    } else if (rhs->done_exit() || rhs->waiting()) {
+      return true;
+    } else {
+      return lhs->get_saws_priority() < rhs->get_saws_priority();
+    }
+  } else {
+    return lhs < rhs;
+  }
+}
+
 void lrr_scheduler::order_warps() {
   order_lrr(m_next_cycle_prioritized_warps, m_supervised_warps,
             m_last_supervised_issued, m_supervised_warps.size());
 }
 
+void saws_scheduler::order_warps() {
+  // saws priority is initialized to cta_id when the warp is created, priority 0 is top priority and at the head of the list
+  // the value can only be changed by the warp_promotion algorithm so this ordering shouldn't change unless a warp has reached a barrier
+  order_by_priority(m_next_cycle_prioritized_warps, m_supervised_warps,
+                  m_last_supervised_issued, m_supervised_warps.size(),
+                  ORDERED_PRIORITY_FUNC_ONLY,
+                  scheduler_unit::sort_warps_by_saws_priority);
+}
+
+void saws_scheduler::warp_promotion_alg(unsigned cta_id) {
+  if (m_toggle_bit) {
+    // parameter cta_id is the id of the cta to be promoted
+    if (m_next_cycle_prioritized_warps.front()->get_cta_id() == cta_id) {
+      unsigned head_priority = m_next_cycle_prioritized_warps.front()->get_saws_priority();
+      for (auto w : m_supervised_warps) {
+        if (w->get_cta_id() == cta_id) {
+          w->m_saws_priority = head_priority;
+        }
+      }
+    } else {
+      for (auto w: m_supervised_warps) {
+            if (w->get_cta_id() == cta_id) {
+              w->m_saws_priority = m_promotion_reg;
+            } else {
+              // we're doing an insertion so all lower priority warps not being promoted need to shift down the list
+              if (w->m_saws_priority >= m_promotion_reg) {
+                w->m_saws_priority++;
+              }
+            }
+      }
+      m_promotion_reg++;
+    }
+    
+  }
+  m_toggle_bit = !m_toggle_bit;
+}
 void gto_scheduler::order_warps() {
   order_by_priority(m_next_cycle_prioritized_warps, m_supervised_warps,
                     m_last_supervised_issued, m_supervised_warps.size(),
@@ -3666,6 +3728,17 @@ void barrier_set_t::warp_reaches_barrier(unsigned cta_id, unsigned warp_id,
   }
   assert(w->second.test(warp_id) == true);  // warp is in cta
 
+  // saws scheduler updates warp scheduling priority based on warps reaching and clearing barriers
+  bool saws_enabled = m_shader->m_saws_enabled;
+  if (saws_enabled) {
+    // check if any warps have reached this bar_id, if none have we need to call promotion function for all schedulers
+    // warps that aren't first or last to the barrier do nothing because the scheduler already deprioritizes warps stalled at barriers
+    if(m_bar_id_to_warps[bar_id].none()) {
+      for (auto s : m_shader->schedulers) {
+        s->warp_promotion_alg(cta_id);
+      }
+    }
+  }
   m_bar_id_to_warps[bar_id].set(warp_id);
   if (bar_type == SYNC || bar_type == RED) {
     m_warp_at_barrier.set(warp_id);
@@ -3676,6 +3749,11 @@ void barrier_set_t::warp_reaches_barrier(unsigned cta_id, unsigned warp_id,
   if (bar_count == (unsigned)-1) {
     if (at_barrier == active) {
       // all warps have reached barrier, so release waiting warps...
+      if (saws_enabled) {
+        for (auto s : m_shader->schedulers) {
+          s->decrement_promotion_reg();
+        }
+      }
       m_bar_id_to_warps[bar_id] &= ~at_barrier;
       m_warp_at_barrier &= ~at_barrier;
       if (bar_type == RED) {
@@ -3687,6 +3765,11 @@ void barrier_set_t::warp_reaches_barrier(unsigned cta_id, unsigned warp_id,
     if ((at_barrier.count() * m_warp_size) == bar_count) {
       // required number of warps have reached barrier, so release waiting
       // warps...
+      if (saws_enabled) {
+        for (auto s : m_shader->schedulers) {
+          s->decrement_promotion_reg();
+        }
+      }
       m_bar_id_to_warps[bar_id] &= ~at_barrier;
       m_warp_at_barrier &= ~at_barrier;
       if (bar_type == RED) {
