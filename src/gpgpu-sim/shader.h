@@ -300,8 +300,8 @@ inline unsigned wid_from_hw_tid(unsigned tid, unsigned warp_size) {
 const unsigned WARP_PER_CTA_MAX = 64;
 typedef std::bitset<WARP_PER_CTA_MAX> warp_set_t;
 
-int register_bank(int regnum, int wid, unsigned num_banks,
-                  unsigned bank_warp_shift, bool sub_core_model,
+unsigned register_bank(int regnum, int wid, unsigned num_banks,
+                  bool sub_core_model,
                   unsigned banks_per_sched, unsigned sched_id);
 
 class shader_core_ctx;
@@ -645,7 +645,7 @@ class opndcoll_rfu_t {  // operand collector based register file unit
    public:
     op_t() { m_valid = false; }
     op_t(collector_unit_t *cu, unsigned op, unsigned reg, unsigned num_banks,
-         unsigned bank_warp_shift, bool sub_core_model,
+        bool sub_core_model,
          unsigned banks_per_sched, unsigned sched_id) {
       m_valid = true;
       m_warp = NULL;
@@ -653,11 +653,11 @@ class opndcoll_rfu_t {  // operand collector based register file unit
       m_operand = op;
       m_register = reg;
       m_shced_id = sched_id;
-      m_bank = register_bank(reg, cu->get_warp_id(), num_banks, bank_warp_shift,
+      m_bank = register_bank(reg, cu->get_warp_id(), num_banks,
                              sub_core_model, banks_per_sched, sched_id);
     }
     op_t(const warp_inst_t *warp, unsigned reg, unsigned num_banks,
-         unsigned bank_warp_shift, bool sub_core_model,
+         bool sub_core_model,
          unsigned banks_per_sched, unsigned sched_id) {
       m_valid = true;
       m_warp = warp;
@@ -665,7 +665,7 @@ class opndcoll_rfu_t {  // operand collector based register file unit
       m_cu = NULL;
       m_operand = -1;
       m_shced_id = sched_id;
-      m_bank = register_bank(reg, warp->warp_id(), num_banks, bank_warp_shift,
+      m_bank = register_bank(reg, warp->warp_id(), num_banks,
                              sub_core_model, banks_per_sched, sched_id);
     }
 
@@ -898,7 +898,6 @@ class opndcoll_rfu_t {  // operand collector based register file unit
       m_not_ready.reset();
       m_warp_id = -1;
       m_num_banks = 0;
-      m_bank_warp_shift = 0;
     }
     // accessors
     bool ready() const;
@@ -937,7 +936,6 @@ class opndcoll_rfu_t {  // operand collector based register file unit
     op_t *m_src_op;
     std::bitset<MAX_REG_OPERANDS * 2> m_not_ready;
     unsigned m_num_banks;
-    unsigned m_bank_warp_shift;
     opndcoll_rfu_t *m_rfu;
 
     unsigned m_num_banks_per_sched;
@@ -1013,7 +1011,6 @@ class opndcoll_rfu_t {  // operand collector based register file unit
   unsigned m_num_collector_sets;
   // unsigned m_num_collectors;
   unsigned m_num_banks;
-  unsigned m_bank_warp_shift;
   unsigned m_warp_size;
   std::vector<collector_unit_t *> m_cu;
   arbiter_t m_arbiter;
