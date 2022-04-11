@@ -914,7 +914,7 @@ class opndcoll_rfu_t {  // operand collector based register file unit
     unsigned get_reg_id() const { return m_reg_id; }
 
     // modifiers
-    void init(unsigned n, unsigned num_banks, unsigned log2_warp_size,
+    void init(unsigned n, unsigned num_banks,
               const core_config *config, opndcoll_rfu_t *rfu,
               bool m_sub_core_model, unsigned reg_id,
               unsigned num_banks_per_sched);
