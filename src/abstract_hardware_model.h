@@ -1108,16 +1108,7 @@ class warp_inst_t : public inst_t {
       m_per_scalar_thread[n].memreqaddr[0] = addr;
     }
   }
-  void set_addr(unsigned n, new_addr_type *addr, unsigned num_addrs) {
-    if (!m_per_scalar_thread_valid) {
-      m_per_scalar_thread.resize(m_config->warp_size);
-      m_per_scalar_thread_valid = true;
-    }
-    if (num_addrs > m_per_scalar_thread[n].memreqaddr.size())
-      m_per_scalar_thread[n].memreqaddr.resize(num_addrs);
-    for (unsigned i = 0; i < num_addrs; i++)
-      m_per_scalar_thread[n].memreqaddr[i] = addr[i];
-  }
+  
   void set_addr(unsigned n, std::vector<new_addr_type> &addr) {
     if (!m_per_scalar_thread_valid) {
       m_per_scalar_thread.resize(m_config->warp_size);
