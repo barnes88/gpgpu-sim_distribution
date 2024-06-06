@@ -1047,8 +1047,6 @@ class inst_t {
 
 enum divergence_support_t { POST_DOMINATOR = 1, NUM_SIMD_MODEL };
 
-const unsigned MAX_ACCESSES_PER_INSN_PER_THREAD = 8;
-
 class warp_inst_t : public inst_t {
  public:
   // constructors
@@ -1104,17 +1102,32 @@ class warp_inst_t : public inst_t {
       m_per_scalar_thread.resize(m_config->warp_size);
       m_per_scalar_thread_valid = true;
     }
-    m_per_scalar_thread[n].memreqaddr[0] = addr;
+    if (m_per_scalar_thread[n].memreqaddr.empty()) {
+      m_per_scalar_thread[n].memreqaddr.push_back(addr);
+    } else {
+      m_per_scalar_thread[n].memreqaddr[0] = addr;
+    }
   }
   void set_addr(unsigned n, new_addr_type *addr, unsigned num_addrs) {
     if (!m_per_scalar_thread_valid) {
       m_per_scalar_thread.resize(m_config->warp_size);
       m_per_scalar_thread_valid = true;
     }
-    assert(num_addrs <= MAX_ACCESSES_PER_INSN_PER_THREAD);
+    if (num_addrs > m_per_scalar_thread[n].memreqaddr.size())
+      m_per_scalar_thread[n].memreqaddr.resize(num_addrs);
     for (unsigned i = 0; i < num_addrs; i++)
       m_per_scalar_thread[n].memreqaddr[i] = addr[i];
   }
+  void set_addr(unsigned n, std::vector<new_addr_type> &addr) {
+    if (!m_per_scalar_thread_valid) {
+      m_per_scalar_thread.resize(m_config->warp_size);
+      m_per_scalar_thread_valid = true;
+    }
+    m_per_scalar_thread[n].memreqaddr.resize(addr.size());
+    for (int i = 0; i < addr.size(); i++)
+      m_per_scalar_thread[n].memreqaddr[i] = addr.at(i);
+  }
+
   void print_m_accessq() {
     if (accessq_empty())
       return;
@@ -1243,17 +1256,8 @@ class warp_inst_t : public inst_t {
                            // -- for instruction counting
 
   struct per_thread_info {
-    per_thread_info() {
-      for (unsigned i = 0; i < MAX_ACCESSES_PER_INSN_PER_THREAD; i++)
-        memreqaddr[i] = 0;
-    }
     dram_callback_t callback;
-    new_addr_type
-        memreqaddr[MAX_ACCESSES_PER_INSN_PER_THREAD];  // effective address,
-                                                       // upto 8 different
-                                                       // requests (to support
-                                                       // 32B access in 8 chunks
-                                                       // of 4B each)
+    std::vector<new_addr_type> memreqaddr;
   };
   bool m_per_scalar_thread_valid;
   std::vector<per_thread_info> m_per_scalar_thread;

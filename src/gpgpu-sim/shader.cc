@@ -1707,7 +1707,7 @@ address_type coalesced_segment(address_type addr,
 // (32-bit) word
 unsigned shader_core_ctx::translate_local_memaddr(
     address_type localaddr, unsigned tid, unsigned num_shader,
-    unsigned datasize, new_addr_type *translated_addrs) {
+    unsigned datasize, std::vector<new_addr_type>& translated_addrs) {
   // During functional execution, each thread sees its own memory space for
   // local memory, but these need to be mapped to a shared address space for
   // timing simulation.  We do that mapping here.
@@ -1749,7 +1749,7 @@ unsigned shader_core_ctx::translate_local_memaddr(
     // >4B access, split into 4B chunks
     assert(datasize % 4 == 0);  // Must be a multiple of 4B
     num_accesses = datasize / 4;
-    assert(num_accesses <= MAX_ACCESSES_PER_INSN_PER_THREAD);  // max 32B
+    translated_addrs.resize(num_accesses);
     assert(
         localaddr % 4 ==
         0);  // Address must be 4B aligned - required if accessing 4B per
@@ -1758,12 +1758,13 @@ unsigned shader_core_ctx::translate_local_memaddr(
       address_type local_word = localaddr / 4 + i;
       address_type linear_address = local_word * max_concurrent_threads * 4 +
                                     thread_base + LOCAL_GENERIC_START;
-      translated_addrs[i] = linear_address;
+      translated_addrs.at(i) = linear_address;
     }
   } else {
     // Sub-4B access, do only one access
     assert(datasize > 0);
     num_accesses = 1;
+    translated_addrs.resize(num_accesses);
     address_type local_word = localaddr / 4;
     address_type local_word_offset = localaddr % 4;
     assert((localaddr + datasize - 1) / 4 ==
@@ -1771,7 +1772,7 @@ unsigned shader_core_ctx::translate_local_memaddr(
     address_type linear_address = local_word * max_concurrent_threads * 4 +
                                   local_word_offset + thread_base +
                                   LOCAL_GENERIC_START;
-    translated_addrs[0] = linear_address;
+    translated_addrs.at(0) = linear_address;
   }
   return num_accesses;
 }
@@ -4745,13 +4746,13 @@ void exec_shader_core_ctx::checkExecutionStatusAndUpdate(warp_inst_t &inst,
                                                          unsigned tid) {
   if (inst.isatomic()) m_warp[inst.warp_id()]->inc_n_atomic();
   if (inst.space.is_local() && (inst.is_load() || inst.is_store())) {
-    new_addr_type localaddrs[MAX_ACCESSES_PER_INSN_PER_THREAD];
+    std::vector<new_addr_type> localaddrs;
     unsigned num_addrs;
     num_addrs = translate_local_memaddr(
         inst.get_addr(t), tid,
         m_config->n_simt_clusters * m_config->n_simt_cores_per_cluster,
-        inst.data_size, (new_addr_type *)localaddrs);
-    inst.set_addr(t, (new_addr_type *)localaddrs, num_addrs);
+        inst.data_size, localaddrs);
+    inst.set_addr(t, localaddrs);
   }
   if (ptx_thread_done(tid)) {
     m_warp[inst.warp_id()]->set_completed(t);

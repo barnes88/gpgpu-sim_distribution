@@ -528,11 +528,8 @@ void warp_inst_t::memory_coalescing_arch(bool is_write,
         // Otherwise keep the same data_size for sub-4B access to local memory
       }
 
-      assert(num_accesses <= MAX_ACCESSES_PER_INSN_PER_THREAD);
-
-      //            for(unsigned access=0; access<num_accesses; access++) {
       for (unsigned access = 0;
-           (access < MAX_ACCESSES_PER_INSN_PER_THREAD) &&
+           (access < m_per_scalar_thread[thread].memreqaddr.size()) &&
            (m_per_scalar_thread[thread].memreqaddr[access] != 0);
            access++) {
         new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[access];

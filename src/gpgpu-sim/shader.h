@@ -2453,7 +2453,7 @@ class shader_core_ctx : public core_t {
   // Returns numbers of addresses in translated_addrs
   unsigned translate_local_memaddr(address_type localaddr, unsigned tid,
                                    unsigned num_shader, unsigned datasize,
-                                   new_addr_type *translated_addrs);
+                                   std::vector<new_addr_type> &translated_addrs);
 
   void read_operands();
 

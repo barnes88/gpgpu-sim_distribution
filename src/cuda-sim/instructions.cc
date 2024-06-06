@@ -3456,8 +3456,7 @@ void mma_st_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
     memory_space *mem = NULL;
     addr_t addr = addr_reg.u32;
 
-    new_addr_type mem_txn_addr[MAX_ACCESSES_PER_INSN_PER_THREAD];
-    int num_mem_txn = 0;
+    std::vector<new_addr_type> mem_txn_addr;
 
     smid = thread->get_hw_sid();
     if (whichspace(addr) == shared_space) {
@@ -3488,7 +3487,7 @@ void mma_st_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
         // mem->write(new_addr+4*acc_float_offset(k,wmma_layout,stride),size/8,&v[k].s64,thread,pI);
         push_addr = new_addr + 4 * acc_float_offset(k, wmma_layout, stride);
         mem->write(push_addr, size / 8, &v[k].s64, thread, pI);
-        mem_txn_addr[num_mem_txn++] = push_addr;
+        mem_txn_addr.push_back(push_addr);
 
         if (core->get_gpu()->gpgpu_ctx->debug_tensorcore) {
           printf(
@@ -3509,12 +3508,12 @@ void mma_st_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
           // mem->write(new_addr+k*2,size/8,&nw_v[k].s64,thread,pI);
           push_addr = new_addr + k * 2;
           mem->write(push_addr, size / 8, &nw_v[k].s64, thread, pI);
-          if (k % 2 == 0) mem_txn_addr[num_mem_txn++] = push_addr;
+          if (k % 2 == 0) mem_txn_addr.push_back(push_addr);
         } else if (wmma_layout == COL) {
           // mem->write(new_addr+k*2*stride,size/8,&nw_v[k].s64,thread,pI);
           push_addr = new_addr + k * 2 * stride;
           mem->write(push_addr, size / 8, &nw_v[k].s64, thread, pI);
-          mem_txn_addr[num_mem_txn++] = push_addr;
+          mem_txn_addr.push_back(push_addr);
         }
 
         if (core->get_gpu()->gpgpu_ctx->debug_tensorcore)
@@ -3527,7 +3526,7 @@ void mma_st_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
 
     delete[] v;
     inst.space = space;
-    inst.set_addr(thrd, (new_addr_type *)mem_txn_addr, num_mem_txn);
+    inst.set_addr(thrd, mem_txn_addr);
 
     if ((type == F16_TYPE) &&
         (wmma_layout == COL))  // check the profiling xls for details
@@ -3593,8 +3592,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
         addr + thread_group_offset(thrd, wmma_type, wmma_layout, type, stride) *
                    size / 8;
     addr_t fetch_addr;
-    new_addr_type mem_txn_addr[MAX_ACCESSES_PER_INSN_PER_THREAD];
-    int num_mem_txn = 0;
+    std::vector<new_addr_type> mem_txn_addr;
 
     if (wmma_type == LOAD_A) {
       for (i = 0; i < 16; i++) {
@@ -3610,7 +3608,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
           printf("mma_ld:wrong_layout_type\n");
           abort();
         }
-        if (i % 2 == 0) mem_txn_addr[num_mem_txn++] = fetch_addr;
+        if (i % 2 == 0) mem_txn_addr.push_back(fetch_addr);
       }
     } else if (wmma_type == LOAD_B) {
       for (i = 0; i < 16; i++) {
@@ -3626,7 +3624,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
           printf("mma_ld:wrong_layout_type\n");
           abort();
         }
-        if (i % 2 == 0) mem_txn_addr[num_mem_txn++] = fetch_addr;
+        if (i % 2 == 0) mem_txn_addr.push_back(fetch_addr);
       }
     } else if (wmma_type == LOAD_C) {
       for (i = 0; i < 8; i++) {
@@ -3635,12 +3633,12 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
             // mem->read(new_addr+2*i,size/8,&data[i].s64);
             fetch_addr = new_addr + 2 * i;
             mem->read(fetch_addr, size / 8, &data[i].s64);
-            if (i % 2 == 0) mem_txn_addr[num_mem_txn++] = fetch_addr;
+            if (i % 2 == 0) mem_txn_addr.push_back(fetch_addr);
           } else if (wmma_layout == COL) {
             // mem->read(new_addr+2*stride*i,size/8,&data[i].s64);
             fetch_addr = new_addr + 2 * stride * i;
             mem->read(fetch_addr, size / 8, &data[i].s64);
-            mem_txn_addr[num_mem_txn++] = fetch_addr;
+            mem_txn_addr.push_back(fetch_addr);
           } else {
             printf("mma_ld:wrong_type\n");
             abort();
@@ -3649,7 +3647,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
           // mem->read(new_addr+4*acc_float_offset(i,wmma_layout,stride),size/8,&data[i].s64);
           fetch_addr = new_addr + 4 * acc_float_offset(i, wmma_layout, stride);
           mem->read(fetch_addr, size / 8, &data[i].s64);
-          mem_txn_addr[num_mem_txn++] = fetch_addr;
+          mem_txn_addr.push_back(fetch_addr);
         } else {
           printf("wrong type");
           abort();
@@ -3662,7 +3660,7 @@ void mma_ld_impl(const ptx_instruction *pI, core_t *core, warp_inst_t &inst) {
     }
     // generate timing memory request
     inst.space = space;
-    inst.set_addr(thrd, (new_addr_type *)mem_txn_addr, num_mem_txn);
+    inst.set_addr(thrd, mem_txn_addr);
 
     if ((wmma_type == LOAD_C) && (type == F16_TYPE) &&
         (wmma_layout == COL))  // memory address is scattered, check the
