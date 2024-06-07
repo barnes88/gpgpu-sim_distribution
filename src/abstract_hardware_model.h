@@ -1115,7 +1115,7 @@ class warp_inst_t : public inst_t {
       m_per_scalar_thread_valid = true;
     }
     m_per_scalar_thread[n].memreqaddr.resize(addr.size());
-    for (int i = 0; i < addr.size(); i++)
+    for (unsigned i = 0; i < addr.size(); i++)
       m_per_scalar_thread[n].memreqaddr[i] = addr.at(i);
   }
 

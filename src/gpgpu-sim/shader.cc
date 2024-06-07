@@ -4747,8 +4747,7 @@ void exec_shader_core_ctx::checkExecutionStatusAndUpdate(warp_inst_t &inst,
   if (inst.isatomic()) m_warp[inst.warp_id()]->inc_n_atomic();
   if (inst.space.is_local() && (inst.is_load() || inst.is_store())) {
     std::vector<new_addr_type> localaddrs;
-    unsigned num_addrs;
-    num_addrs = translate_local_memaddr(
+    translate_local_memaddr(
         inst.get_addr(t), tid,
         m_config->n_simt_clusters * m_config->n_simt_cores_per_cluster,
         inst.data_size, localaddrs);
