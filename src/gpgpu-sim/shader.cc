@@ -1060,7 +1060,7 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
     // If the mask of the instruction is all 0, then the address is also 0, 
     // so that there's no need to check through the writeback
     if (next_inst->get_active_mask() == 0) {
-      (m_warp[warp_id]->m_ldgdepbar_buf.back()).back().pc = -1;
+      (m_warp[warp_id]->m_ldgdepbar_buf.back()).back().pc = null_pc;
     }
   }
 
@@ -1087,9 +1087,9 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
     // Check for the case that the LDGSTSs monitored have finished when encountering the 
     // DEPBAR instruction 
     bool done_flag = true;
-    for (int i = 0; i < end_group; i++) {
-      for (int j = 0; j < m_warp[warp_id]->m_ldgdepbar_buf[i].size(); j++) {
-        if (m_warp[warp_id]->m_ldgdepbar_buf[i][j].pc != -1) {
+    for (unsigned i = 0; i < end_group; i++) {
+      for (unsigned j = 0; j < m_warp[warp_id]->m_ldgdepbar_buf[i].size(); j++) {
+        if (m_warp[warp_id]->m_ldgdepbar_buf[i][j].pc != null_pc) {
           done_flag = false;
           goto UpdateDEPBAR;
         }
@@ -1853,12 +1853,12 @@ void shader_core_ctx::unset_depbar(const warp_inst_t &inst) {
     (m_warp[inst.warp_id()]->m_depbar_start_id - m_warp[inst.warp_id()]->m_depbar_group + 1);
 
   if (inst.m_is_ldgsts) { 
-    for (int i = 0; i < m_warp[inst.warp_id()]->m_ldgdepbar_buf.size(); i++) {
-      for (int j = 0; j < m_warp[inst.warp_id()]->m_ldgdepbar_buf[i].size(); j++) {
+    for (unsigned i = 0; i < m_warp[inst.warp_id()]->m_ldgdepbar_buf.size(); i++) {
+      for (unsigned j = 0; j < m_warp[inst.warp_id()]->m_ldgdepbar_buf[i].size(); j++) {
         if (m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].pc == inst.pc) {
           // Handle the case that same pc results in multiple LDGSTS instructions
           if (m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].get_addr(0) == inst.get_addr(0)) {
-            m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].pc = -1;
+            m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].pc = null_pc;
             goto DoneWB;
           }
         }  
@@ -1866,9 +1866,9 @@ void shader_core_ctx::unset_depbar(const warp_inst_t &inst) {
     }
 
   DoneWB:
-    for (int i = 0; i < end_group; i++) {
-      for (int j = 0; j < m_warp[inst.warp_id()]->m_ldgdepbar_buf[i].size(); j++) {
-        if (m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].pc != -1) {
+    for (unsigned i = 0; i < end_group; i++) {
+      for (unsigned j = 0; j < m_warp[inst.warp_id()]->m_ldgdepbar_buf[i].size(); j++) {
+        if (m_warp[inst.warp_id()]->m_ldgdepbar_buf[i][j].pc != null_pc) {
           done_flag = false;
           goto UpdateDEPBAR;
         }

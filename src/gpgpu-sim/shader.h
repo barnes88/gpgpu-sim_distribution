@@ -133,9 +133,9 @@ class shd_warp_t {
     m_waiting_ldgsts = false;
 
     // Ni: Clear m_ldgdepbar_buf
-    for (int i = 0; i < m_ldgdepbar_buf.size(); i++) {
-      m_ldgdepbar_buf[i].clear();
-    }
+    for (auto b : m_ldgdepbar_buf) {
+      b.clear();
+     }
     m_ldgdepbar_buf.clear();
   }
   void init(address_type start_pc, unsigned cta_id, unsigned wid,
@@ -164,9 +164,9 @@ class shd_warp_t {
     m_waiting_ldgsts = false;
 
     // Ni: Clear m_ldgdepbar_buf
-    for (int i = 0; i < m_ldgdepbar_buf.size(); i++) {
-      m_ldgdepbar_buf[i].clear();
-    }
+    for (auto b : m_ldgdepbar_buf) {
+      b.clear();
+     }
     m_ldgdepbar_buf.clear();
   }
 
@@ -2548,6 +2548,7 @@ class shader_core_ctx : public core_t {
   unsigned int m_occupied_ctas;
   std::bitset<MAX_THREAD_PER_SM> m_occupied_hwtid;
   std::map<unsigned int, unsigned int> m_occupied_cta_to_hwtid;
+  const address_type null_pc = -1;
 };
 
 class exec_shader_core_ctx : public shader_core_ctx {
