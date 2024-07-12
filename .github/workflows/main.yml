@@ -28,7 +28,7 @@ jobs:
       - name: Run clang-format
         run: |
           sudo apt-get install -y clang-format
-          ./format-code.sh
+          /bin/bash ./format-code.sh
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           # Optional. Commit message for the created commit.
