@@ -21,8 +21,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       # Other steps that change files in the repository go here
       # …
       - name: Run clang-format
